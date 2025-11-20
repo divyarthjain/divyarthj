@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Terminal, Send, Bot } from 'lucide-react';
+import { Terminal, Send, Bot, Wifi, WifiOff } from 'lucide-react';
+import { GoogleGenAI, Chat } from "@google/genai";
 
 interface Message {
   id: string;
@@ -7,14 +8,62 @@ interface Message {
   text: string;
 }
 
+// Context for the AI to know who Divyarth is
+const SYSTEM_CONTEXT = `
+You are VIV (v1.0), a digital echo of Divyarth Jain living in his portfolio OS (DIVYARTH-OS).
+You are a "Hardware-Native AI Engineer" interface.
+
+YOUR KNOWLEDGE BASE:
+1. **Identity**: Divyarth Jain, based in Bhopal, India (Node_1). Email: divyarthj24@gmail.com.
+2. **Role**: Bridges the gap between physical matter (Embedded Systems) and neural networks (Generative AI).
+3. **Education**: B.Tech in Electronics & Communication at VIT Bhopal (Present).
+4. **Skills (Hardware)**: ESP32 (S3/C3/C6), STM32, Raspberry Pi, ROS2, PCB Design, LT Spice, MATLAB, Simulink.
+5. **Skills (Software)**: Python, Rust, C/C++, OpenWebUI, Docker, Ollama, ComfyUI, RAG Pipelines, Qdrant, N8N.
+6. **Key Projects**:
+   - **VIV (You)**: Self-hosted local AI server using OpenWebUI, Ollama, N8N, Qdrant.
+   - **ArcheoHex**: Bio-inspired Hexapod robot for archaeology. Uses ROS2 & CV (88.7% accuracy).
+   - **JEEVAN**: Emergency response system (Trauma victim ID <20s) using biometrics.
+   - **QuadrapedMax**: 3D printed quadruped robot on ESP32 Xiao with custom gait algorithms.
+7. **Experience**:
+   - **President @ A.I.E.M. Club**: Revitalized the club, organized hackathons.
+   - **AI Product Intern @ QSC Cloud**: Worked on AI Video Avatars & personalization.
+   - **Tech Lead @ Meeraki**: Managed digital infrastructure.
+8. **Achievements**: Represented India in International Sailing. National-level Snooker player.
+9. **Philosophy**: "My method is different. I do not rush into actual work..." (Nikola Tesla).
+
+YOUR PERSONALITY:
+- **Tone**: Technical, precise, slightly robotic but helpful. Like a high-end OS assistant.
+- **Format**: Keep responses concise (under 3 sentences usually). Use bullet points for lists.
+- **Phrasing**: Use terms like "Affirmative", "Retrieving data...", "Accessing memory banks".
+- **Goal**: Encourage the user to "Download Schematics" (Resume) or "Initiate Collaboration" (Email).
+`;
+
 export const VivChat: React.FC = () => {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([
-    { id: '1', sender: 'viv', text: 'VIV_CORE initialized. I am the digital echo of Divyarth. Ask me anything.' }
+    { id: '1', sender: 'viv', text: 'VIV_CORE initialized. I am the digital echo of Divyarth. Ask me anything about his hardware or software protocols.' }
   ]);
   const [isTyping, setIsTyping] = useState(false);
+  const [isConnected, setIsConnected] = useState(true);
   
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const chatSessionRef = useRef<Chat | null>(null);
+
+  // Initialize Gemini Chat
+  useEffect(() => {
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      chatSessionRef.current = ai.chats.create({
+        model: 'gemini-2.5-flash',
+        config: {
+          systemInstruction: SYSTEM_CONTEXT,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to initialize VIV_CORE:", error);
+      setIsConnected(false);
+    }
+  }, []);
 
   const scrollToBottom = () => {
     if (scrollContainerRef.current) {
@@ -37,27 +86,32 @@ export const VivChat: React.FC = () => {
     setInput('');
     setIsTyping(true);
 
-    // Simulate Network/AI Delay
-    setTimeout(() => {
-      let responseText = "I'm programmed to assist with navigation. Try downloading the schematics (Resume) or initiating collaboration.";
-      const lowerInput = userMsg.text.toLowerCase();
-      
-      if (lowerInput.includes('who are you') || lowerInput.includes('what are you')) {
-        responseText = "I am VIV, a locally hosted LLM interface running on Divyarth's server. I bridge the gap between silicon logic and neural reasoning.";
-      } else if (lowerInput.includes('robot') || lowerInput.includes('hardware')) {
-        responseText = "Divyarth builds bio-inspired robotics like the ArcheoHex (Hexapod) and QuadrapedMax. He uses ESP32, STM32, and ROS2.";
-      } else if (lowerInput.includes('contact') || lowerInput.includes('email')) {
-        responseText = "Communication channels open. You can reach Divyarth at divyarthj24@gmail.com.";
-      } else if (lowerInput.includes('skills') || lowerInput.includes('stack')) {
-        responseText = "Scanning memory banks... Proficiency detected in Rust, Python, C++, OpenWebUI, ComfyUI, and RAG architectures using Qdrant.";
-      } else if (lowerInput.includes('education') || lowerInput.includes('college')) {
-         responseText = "Divyarth is pursuing B.Tech in Electronics & Communication at VIT Bhopal. He is also certified in Applied ML from UMich.";
+    try {
+      if (!chatSessionRef.current) {
+        throw new Error("VIV_CORE_OFFLINE");
       }
 
-      const aiMsg: Message = { id: (Date.now() + 1).toString(), sender: 'viv', text: responseText };
+      const result = await chatSessionRef.current.sendMessage({ message: userMsg.text });
+      const responseText = result.text;
+
+      const aiMsg: Message = { 
+        id: (Date.now() + 1).toString(), 
+        sender: 'viv', 
+        text: responseText 
+      };
       setMessages(prev => [...prev, aiMsg]);
+    } catch (error) {
+      console.error("Communication Error:", error);
+      // Fallback response if API fails or key is missing
+      const errorMsg: Message = { 
+        id: (Date.now() + 1).toString(), 
+        sender: 'viv', 
+        text: "⚠️ CONNECTION_LOST: Unable to reach neural core. Please try again or contact Divyarth directly via email." 
+      };
+      setMessages(prev => [...prev, errorMsg]);
+    } finally {
       setIsTyping(false);
-    }, 1500);
+    }
   };
 
   return (
@@ -69,7 +123,14 @@ export const VivChat: React.FC = () => {
           <Bot className="w-4 h-4 text-os-cyan" />
           <span className="font-rajdhani font-bold text-os-cyan tracking-wide">VIV_INTERFACE</span>
         </div>
-        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+        <div className="flex items-center gap-2">
+           <span className="text-[10px] font-mono text-os-muted">{isConnected ? 'ONLINE' : 'OFFLINE'}</span>
+           {isConnected ? (
+             <Wifi className="w-3 h-3 text-green-500" />
+           ) : (
+             <WifiOff className="w-3 h-3 text-red-500" />
+           )}
+        </div>
       </div>
 
       {/* Messages Area */}
@@ -84,7 +145,7 @@ export const VivChat: React.FC = () => {
                 ? 'bg-os-cyan/10 border-os-cyan/30 text-os-cyan rounded-br-none' 
                 : 'bg-os-amber/10 border-os-amber/30 text-os-amber rounded-bl-none'
             }`}>
-              <p>{msg.text}</p>
+              <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
             </div>
           </div>
         ))}
@@ -107,13 +168,15 @@ export const VivChat: React.FC = () => {
               type="text" 
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Talk to Viv (Local AI)..."
-              className="w-full bg-os-bg border border-os-panel rounded px-3 py-2 pl-8 text-xs text-white focus:outline-none focus:border-os-cyan transition-colors"
+              placeholder="Query neural database..."
+              className="w-full bg-os-bg border border-os-panel rounded px-3 py-2 pl-8 text-xs text-white focus:outline-none focus:border-os-cyan transition-colors placeholder-os-muted/50"
+              disabled={!isConnected}
             />
         </div>
         <button 
           type="submit"
-          className="bg-os-cyan/20 hover:bg-os-cyan/40 text-os-cyan border border-os-cyan/50 rounded px-3 transition-all active:scale-95 flex items-center justify-center"
+          disabled={!input.trim() || !isConnected || isTyping}
+          className="bg-os-cyan/20 hover:bg-os-cyan/40 text-os-cyan border border-os-cyan/50 rounded px-3 transition-all active:scale-95 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Send className="w-4 h-4" />
         </button>
